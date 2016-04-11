@@ -1,0 +1,1105 @@
+= Red Hat Openstack Operational Tools
+Graeme Gillies <ggillies@redhat.com>
+
+== Overview
+Red Hat Openstack comes with an optional suite of tools designed to help operators maintain an Openstack environment. The tools perform the following functions
+
+* Centralised Logging
+* Availability Monitoring
+* Performance Monitoring
+
+This document will go through the preparation and installation of these tools
+
+WARNING: The Red Hat Openstack Operational Tool Suite is currently Tech Preview
+
+
+== Architecture
+
+=== Centralised Logging
+The centralised logging toolchain consists of a number of components including
+
+* A Log Collection Agent (Fluentd)
+* A Log relay/transformer (Fluentd)
+* A Data store (Elasticsearch)
+* An API/Presentation Layer (Kibana)
+
+These components and their interactions are laid out in the following diagram
+
+image::centralised_logging_single_node_fluentd.png[]
+
+=== Availability Monitoring
+The avilability monitoring toolchain consists of a number of components including
+
+* A Monitoring Agent (sensu)
+* A Monitoring Relay/proxy (rabbitmq)
+* A Monitoring Controller/Server (sensu)
+* An API/Presentation Layer (uchiwa)
+
+These components and their interactions are laid out in the following diagram
+
+image::availability_monitoring_single_node.png[]
+
+=== Performance Monitoring
+The performance monitoring toolchain consists of a number of components including
+
+* A Collection Agent (collectd)
+* A Collection Aggregator/Relay (graphite)
+* A Data Store (whisperdb)
+* An API/Presentation Layer (grafana)
+
+These components and their interactions are laid out in the following diagram
+
+image::performance_monitoring_single_node_collectd.png[]
+
+== Installing the Centralised Logging Suite
+=== Installing the Centralised Log Relay/Transformer
+Locate a bare metal system that meets the following minimum specifications
+
+* 8GB of Memory
+* Single Socket Xeon Class CPU
+* 500GB of Disk Space
+
+Do a fresh RHEL 7.1 basic install onto the machine. Then make sure the following channels are available to the machine via Subscription Manager or Satellite
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+First thing we will need to open the firewall on the machine to allow connections to fluentd and apache
+
+ firewall-cmd --zone=public --add-port=4000/tcp --permanent
+ firewall-cmd --zone=public --add-service=http --permanent
+ firewall-cmd --reload
+
+Once that is done, install the fluentd and elasticsearch software with the following commands
+
+ yum install -y elasticsearch fluentd rubygem-fluent-plugin-elasticsearch kibana httpd
+
+Now we will configure elasticsearch. To do this edit the file /etc/elasticsearch/elasticsearch.yml and add the following lines to the end of the file
+
+ http.cors.enabled: true
+ http.cors.allow-origin: "/.*/"
+
+Now start the elasticsearch instance and enable it at boot
+
+ systemctl start elasticsearch
+ systemctl enable elasticsearch
+
+To confirm the elasticsearch instance is working, run the following curl command and confirm it returns a valid response similar to below
+
+ curl http://localhost:9200/
+
+This should give the response
+
+ {
+   "status" : 200,
+   "name" : "elasticsearch.example.com",
+   "cluster_name" : "elasticsearch",
+   "version" : {
+     "number" : "1.5.2",
+     "build_hash" : "c88f77ffc81301dfa9dfd81ca2232f09588bd512",
+     "build_timestamp" : "2015-02-19T13:05:36Z",
+     "build_snapshot" : false,
+     "lucene_version" : "4.10.3"
+   },
+   "tagline" : "You Know, for Search"
+ }
+
+Once this is done, we now need to configure fluentd to accept log data and write it to elasticsearch. Edit the file /etc/fluentd/fluent.conf and make it have the just the following content
+
+ # In v1 configuration, type and id are @ prefix parameters.
+ # @type and @id are recommended. type and id are still available for backward compatibility
+
+ <source>
+   @type forward
+   port 4000
+   bind 0.0.0.0
+ </source>
+
+ <match **>
+   @type elasticsearch
+   host localhost
+   port 9200
+   logstash_format true
+   flush_interval 5
+ </match>
+
+Now start fluentd and enable it at boot
+
+ systemctl start fluentd
+ systemctl enable fluentd
+
+Check the journal for fluentd and ensure it has no errors at start
+
+ journalctl -u fluentd -l -f
+
+Finally we will configure kibana to point to our elasticsearch instace. Create the file /etc/httpd/conf.d/kibana3.conf and place the following content inside
+
+ <VirtualHost *:80>
+
+   DocumentRoot /usr/share/kibana
+   <Directory /usr/share/kibana>
+     Require all granted
+     Options -Multiviews
+   </Directory>
+
+   # Proxy for _aliases and .*/_search
+   <LocationMatch "^/(_nodes|_aliases|.*/_aliases|_search|.*/_search|_mapping|.*/_mapping)$">
+     ProxyPassMatch http://127.0.0.1:9200/$1
+     ProxyPassReverse http://127.0.0.1:9200/$1
+   </LocationMatch>
+
+   # Proxy for kibana-int/{dashboard,temp}
+   <LocationMatch "^/(kibana-int/dashboard/|kibana-int/temp)(.*)$">
+     ProxyPassMatch http://127.0.0.1:9200/$1$2
+     ProxyPassReverse http://127.0.0.1:9200/$1$2
+   </LocationMatch>
+
+ </VirtualHost>
+
+Now we need to enable kibana (inside apache) to connect to elasticsearch, and then start httpd and enable it at boot
+
+ setsebool -P httpd_can_network_connect 1
+ systemctl start httpd
+ systemctl enable httpd
+
+=== Installing the log collection agent on all nodes
+To collect the logs from all machines in the Openstack environment and send them to your centralised logging server, you will need to make sure the following channel is enabled in Subscription Manager/Satellite on all machines
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+Once this is done, you will need to install the following packages on all Openstack machines
+
+ yum install -y fluentd rubygem-fluent-plugin-add
+
+Now you will need to configure the fluent user on all nodes so it has permissions to read all the Openstack log files. Do this by running the following command
+
+ for user in {keystone,nova,neutron,cinder,glance}; do  usermod -a -G $user fluentd; done
+
+Note that you may get an error on some nodes about missing groups. This is ok as not all nodes run all services.
+
+Next you will need to configure fluentd on all the machines. Make sure the file /etc/fluentd/fluent.conf on all machines looks like the following (be sure to replace $FQDN_OF_LOGGING_SERVER with the dns name or IP of your centralised logging server configued above)
+
+ # In v1 configuration, type and id are @ prefix parameters.
+ # @type and @id are recommended. type and id are still available for backward compatibility
+ 
+ # Nova compute
+ <source>
+   @type tail
+   path /var/log/nova/nova-compute.log
+   tag nova.compute
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) \[(?<context>[^\]]*)\] (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match nova.compute>
+   type add
+   <pair>
+     service nova.compute
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Nova API
+ <source>
+   @type tail
+   path /var/log/nova/nova-api.log
+   tag nova.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) \[(?<context>[^\]]*)\] (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match nova.api>
+   type add
+   <pair>
+     service nova.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Nova Cert
+ <source>
+   @type tail
+   path /var/log/nova/nova-cert.log
+   tag nova.cert
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match nova.cert>
+   type add
+   <pair>
+     service nova.cert
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Nova Conductor
+ <source>
+   @type tail
+   path /var/log/nova/nova-conductor.log
+   tag nova.conductor
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match nova.conductor>
+   type add
+   <pair>
+     service nova.conductor
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Nova Consoleauth
+ <source>
+   @type tail
+   path /var/log/nova/nova-consoleauth.log
+   tag nova.consoleauth
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match nova.consoleauth>
+   type add
+   <pair>
+     service nova.consoleauth
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Nova Scheduler
+ <source>
+   @type tail
+   path /var/log/nova/nova-scheduler.log
+   tag nova.scheduler
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match nova.scheduler>
+   type add
+   <pair>
+     service nova.scheduler
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Neutron Openvswitch Agent
+ <source>
+   @type tail
+   path /var/log/neutron/openvswitch-agent.log
+   tag neutron.openvswitch
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match neutron.openvswitch>
+   type add
+   <pair>
+     service neutron.openvswitch
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Neutron Server
+ <source>
+   @type tail
+   path /var/log/neutron/server.log
+   tag neutron.server
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match neutron.server>
+   type add
+   <pair>
+     service neutron.server
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Neutron DHCP Agent
+ <source>
+   @type tail
+   path /var/log/neutron/dhcp-agent.log
+   tag neutron.dhcp
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match neutron.dhcp>
+   type add
+   <pair>
+     service neutron.dhcp
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Neutron L3 Agent
+ <source>
+   @type tail
+   path /var/log/neutron/l3-agent.log
+   tag neutron.l3
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match neutron.l3>
+   type add
+   <pair>
+     service neutron.l3
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Neutron Metadata Agent
+ <source>
+   @type tail
+   path /var/log/neutron/metadata-agent.log
+   tag neutron.metadata
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match neutron.metadata>
+   type add
+   <pair>
+     service neutron.metadata
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Keystone
+ <source>
+   @type tail
+   path /var/log/keystone/keystone.log
+   tag keystone
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match keystone>
+   type add
+   <pair>
+     service keystone
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Glance API
+ <source>
+   @type tail
+   path /var/log/glance/api.log
+   tag glance.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match glance.api>
+   type add
+   <pair>
+     service glance.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Glance Registry
+ <source>
+   @type tail
+   path /var/log/glance/registry.log
+   tag glance.registry
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match glance.registry>
+   type add
+   <pair>
+     service glance.registry
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Cinder API
+ <source>
+   @type tail
+   path /var/log/cinder/api.log
+   tag cinder.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match cinder.api>
+   type add
+   <pair>
+     service cinder.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Cinder Scheduler
+ <source>
+   @type tail
+   path /var/log/cinder/scheduler.log
+   tag cinder.scheduler
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match cinder.scheduler>
+   type add
+   <pair>
+     service cinder.scheduler
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Cinder Volume
+ <source>
+   @type tail
+   path /var/log/cinder/volume.log
+   tag cinder.volume
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match cinder.volume>
+   type add
+   <pair>
+     service cinder.volume
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Cinder Backup
+ <source>
+   @type tail
+   path /var/log/cinder/backup.log
+   tag cinder.backup
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match cinder.backup>
+   type add
+   <pair>
+     service cinder.backup
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Heat API CloudFormation
+ <source>
+   @type tail
+   path /var/log/heat/heat-api-cfn.log
+   tag heat.api.cfn
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match heat.api.cfn>
+   type add
+   <pair>
+     service heat.api.cfn
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ 
+ # Heat API CloudWatch
+ <source>
+   @type tail
+   path /var/log/heat/heat-api-cloudwatch.log
+   tag heat.api.cloudwatch
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match heat.api.cloudwatch>
+   type add
+   <pair>
+     service heat.api.cloudwatch
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Heat API
+ <source>
+   @type tail
+   path /var/log/heat/heat-api.log
+   tag heat.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match heat.api>
+   type add
+   <pair>
+     service heat.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Heat Engine
+ <source>
+   @type tail
+   path /var/log/heat/heat-engine.log
+   tag heat.engine
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match heat.engine>
+   type add
+   <pair>
+     service heat.engine
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer Agent Notification
+ <source>
+   @type tail
+   path /var/log/ceilometer/agent-notification.log
+   tag ceilometer.agent.notification
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.agent.notification>
+   type add
+   <pair>
+     service ceilometer.agent.notification
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer Alarm Evaluator
+ <source>
+   @type tail
+   path /var/log/ceilometer/alarm-evaluator.log
+   tag ceilometer.alarm.evaluator
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.alarm.evaluator>
+   type add
+   <pair>
+     service ceilometer.alarm.evaluator
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer Alarm Notifier
+ <source>
+   @type tail
+   path /var/log/ceilometer/alarm-notifier.log
+   tag ceilometer.alarm.notifier
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.alarm.notifier>
+   type add
+   <pair>
+     service ceilometer.alarm.notifier
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer API 
+ <source>
+   @type tail
+   path /var/log/ceilometer/api.log
+   tag ceilometer.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.api>
+   type add
+   <pair>
+     service ceilometer.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer DB Sync
+ <source>
+   @type tail
+   path /var/log/ceilometer/ceilometer-dbsync.log
+   tag ceilometer.dbsync
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.dbsync>
+   type add
+   <pair>
+     service ceilometer.dbsync
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer Central
+ <source>
+   @type tail
+   path /var/log/ceilometer/central.log
+   tag ceilometer.central
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.central>
+   type add
+   <pair>
+     service ceilometer.central
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer Collector
+ <source>
+   @type tail
+   path /var/log/ceilometer/collector.log
+   tag ceilometer.collector
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.collector>
+   type add
+   <pair>
+     service ceilometer.collector
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ceilometer Compute
+ <source>
+   @type tail
+   path /var/log/ceilometer/compute.log
+   tag ceilometer.compute
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ceilometer.compute>
+   type add
+   <pair>
+     service ceilometer.compute
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Sahara All
+ <source>
+   @type tail
+   path /var/log/sahara/sahara-all.log
+   tag sahara.all
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match sahara.all>
+   type add
+   <pair>
+     service sahara.all
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Trove API
+ <source>
+   @type tail
+   path /var/log/trove/trove-api.log
+   tag trove.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match trove.api>
+   type add
+   <pair>
+     service trove.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Trove Conductor 
+ <source>
+   @type tail
+   path /var/log/trove/trove-conductor.log
+   tag trove.conductor
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match trove.conductor>
+   type add
+   <pair>
+     service trove.conductor
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Trove Task Manager
+ <source>
+   @type tail
+   path /var/log/trove/trove-taskmanager.log
+   tag trove.taskmanager
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match trove.taskmanager>
+   type add
+   <pair>
+     service trove.taskmanager
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ironic API
+ <source>
+   @type tail
+   path /var/log/ironic/ironic-api.log
+   tag ironic.api
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ironic.api>
+   type add
+   <pair>
+     service ironic.api
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ # Ironic Conductor
+ <source>
+   @type tail
+   path /var/log/ironic/ironic-conductor.log
+   tag ironic.conductor
+   format multiline
+   format_firstline /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   format /(?<time>[^ ]* [^ ]*) (?<pid>[^ ]*) (?<loglevel>[^ ]*) (?<class>[^ ]*) (\[(?<context>[^\]]*)\])? (?<message>.*)/
+   time_format %F %T.%L
+ </source>
+ 
+ <match ironic.conductor>
+   type add
+   <pair>
+     service ironic.conductor
+     hostname "#{Socket.gethostname}"
+   </pair>
+ </match>
+ 
+ <match greped.**>
+   @type forward
+   heartbeat_type tcp
+   <server>
+     name $FQDN_OF_LOGGING_SERVER
+     host $FQDN_OF_LOGGING_SERVER
+     port 4000
+   </server>
+ </match>
+
+Now that fluentd is configured, we can start the fluentd service and enable it at boot
+
+ systemctl start fluentd
+ systemctl enable fluentd
+
+You should be able to now go to kibana running on your centralised logging server and see logs start to populate
+
+ http://$FQDN_OF_LOGGING_SERVER/
+
+== Installing the Availability Monitoring Suite
+=== Installing the Monitoring Relay/Controller
+Locate a bare metal system that meets the following minimum specifications
+
+* 4GB of Memory
+* Single Socket Xeon Class CPU
+* 100GB of Disk Space
+
+Do a fresh RHEL 7.1 basic install onto the machine. Then make sure the following channels are available to the machine via Subscription Manager or Satellite
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+First thing we will need to open the firewall on the machine to allow connections to rabbitmq and uchiwa
+
+ firewall-cmd --zone=public --add-port=5672/tcp --permanent
+ firewall-cmd --zone=public --add-port=3000/tcp --permanent
+ firewall-cmd --reload
+
+Now we need to install the components needed for the monitoring server
+
+ yum install -y sensu uchiwa redis rabbitmq-server
+
+First we will configure rabbitmq and redis which are the backbone services. Start both redis and rabbitmq and enable them at boot
+
+ systemctl start redis
+ systemctl enable redis
+ systemctl start rabbitmq
+ systemctl enable rabbitmq
+
+Now we will configure a new rabbitmq virtualhost for sensu, with a username and password combination that can access it.
+
+ rabbitmqctl add_vhost /sensu
+ rabbitmqctl add_user sensu sensu
+ rabbitmqctl set_permissions -p /sensu sensu ".*" ".*" ".*"
+
+Now that the base services are running and configured, we will configure the sensu monitoring server. Edit /etc/sensu/conf.d/rabbitmq.json and add the following contents to the file
+
+ {
+   "rabbitmq": {
+     "port": 5672,
+     "host": "localhost",
+     "user": "sensu",
+     "password": "sensu",
+     "vhost": "/sensu"
+   }
+ }
+
+Next edit /etc/sensu/conf.d/redis.json and add the following contents to the file
+
+ {
+   "redis": {
+     "port": 6379,
+     "host": "localhost"
+   }
+ }
+
+Finally edit /etc/sensu/conf.d/api.json and add the following contents to the file
+
+ {
+   "api": {
+     "bind": "0.0.0.0",
+     "port": 4567,
+     "host": "localhost"
+   }
+ }
+
+Now we will start and enable all sensu services
+
+ systemctl start sensu-server
+ systemctl enable sensu-server
+ systemctl start sensu-api
+ systemctl enable sensu-api
+
+Finally we need to configure Uchiwa, which is the web interface for sensu. To do this we edit the file /etc/uchiwa/uchiwa.json and add the following contents to the file
+
+ {
+   "sensu": [
+     {
+       "name": "Openstack",
+       "host": "localhost",
+       "port": 4567
+     }
+   ],
+   "uchiwa": {
+     "host": "0.0.0.0",
+     "port": 3000,
+     "refresh": 5
+   }
+ }
+
+Now we will start and enable the Uchiwa web interface
+
+ systemctl start uchiwa
+ systemctl enable uchiwa
+
+=== Installing the Availability Monitoring Agent on all nodes
+To monitor all machines in the Openstack environment, you will need to make sure the following channels are enabled in Subscription Manager/Satellite on all machines
+
+ rhel-7-server-openstack-7.0-optools-rpms
+ rhel-7-server-optional-rpms
+
+Once this is done, you will need to install the following packages on all Openstack machines
+
+ yum install -y sensu
+
+Next you will need to configure sensu agent on all machines. Edit the file /etc/sensu/conf.d/rabbitmq.json on all machines to have the following content (remeber to replace $FQDN_OF_MONITORING_SERVER with the hostname or ip address of your monitoring server configured in the previous section)
+
+ {
+   "rabbitmq": {
+     "port": 5672,
+     "host": "$FQDN_OF_MONITORING_SERVER",
+     "user": "sensu",
+     "password": "sensu",
+     "vhost": "/sensu"
+   }
+ }
+
+Now we need to edit the file /etc/sensu/conf.d/client.json on all machines to include the following content (remember to replace $FQDN with the hostname of the machine, and $ADDRESS with the public ip address of the machine)
+
+ {
+   "client": {
+     "name": "$FQDN",
+     "address": "$ADDRESS",
+     "subscriptions": [ "all" ]
+   }
+ }
+
+Finally we need to start and enable the sensu client on all machines
+
+ systemctl start sensu-client
+ systemctl enable sensu-client
+
+== Installing the Performance Monitoring Suite
+=== Installing the Collection Aggregator/Relay
+Locate a bare metal system that meets the following minimum specifications
+
+* 4GB of Memory
+* Single Socket Xeon Class CPU
+* 500GB of Disk Space
+
+Do a fresh RHEL 7.1 basic install onto the machine. Then make sure the following channels are available to the machine via Subscription Manager or Satellite
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+First thing we will need to open the firewall on the machine to allow connections to graphite and grafana
+
+ firewall-cmd --zone=public --add-port=2003/tcp --permanent
+ firewall-cmd --zone=public --add-port=3000/tcp --permanent
+ firewall-cmd --reload
+
+Once that is done, install the graphite and grafana software by running the following command
+
+ yum install -y python-carbon graphite-web grafana httpd
+
+First we will configure the grafana web interface to allow access. Edit the file /etc/httpd/conf.d/graphite-web.conf and modify the following lines blow to look like the following (changing Require line)
+
+    <Directory "/usr/share/graphite/">
+        <IfModule mod_authz_core.c>
+            # Apache 2.4
+            Require all granted
+        </IfModule>
+
+Next we will synchronise the database behind graphite web. Run the following command (when prompted if you want to create a super user choose no)
+
+ sudo -u apache /usr/bin/graphite-manage syncdb --noinput
+
+Next we will start and enable all the graphite and grafana services
+
+ systemctl start httpd
+ systemctl enable httpd
+ systemctl start carbon-cache
+ systemctl enable carbon-cache
+ systemctl start grafana-server
+ systemctl enable grafana-server
+
+Now we will configure grafana to talk to our graphite instance. Go to the following address in your browser (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the host we have configured to store the centralised monitoring data
+
+ http://$FQDN_OF_PERFORMANCE_MONITORING_HOST:3000/
+
+You should be presented with the grafana login page. Enter in the default credentials of admin/admin to log into the system. Once you are logged in, click on the grafana logo in the top left of the screen, then choose "Data Sources". At the top of the page click "Add new", Enter in the following details
+
+ Name: graphite
+ Default: yes (tick)
+ Type: Graphite
+
+ Url: http://localhost/
+ Access: proxy
+ Basic Auth: no (unticked)
+
+Then click the "Add" button at the bottom.
+
+=== Installing the Performance Monitoring Collection Agent on all nodes
+To monitor the performance of all machines in the Openstack environment, you will need to make sure the following channel is enabled in Subscription Manager/Satellite on all machines
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+Once this is done, you will need to install the following packages on all Openstack machines
+
+ yum install -y collectd
+
+Next you will need to configure collectd on all machines to send their data to the performance monitoring aggregator/relay. Edit the file /etc/collectd.d/10-write_graphite.conf and place in it the following contents (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the host we configured previously to be the performance monitoring aggregator/relay)
+
+ <LoadPlugin write_graphite>
+   Globals false
+ </LoadPlugin>
+
+ <Plugin write_graphite>
+   <Carbon>
+     Host "$FQDN_OF_PERFORMANCE_MONITORING_HOST"
+     Port "2003"
+     Prefix "collectd."
+     EscapeCharacter "_"
+     StoreRates true
+     LogSendErrors true
+     Protocol "tcp"
+   </Carbon>
+ </Plugin>
+
+Now we need to start and enable collectd on all hosts
+
+ systemctl start collectd
+ systemctl enable collectd
