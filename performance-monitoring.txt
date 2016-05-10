@@ -1,0 +1,104 @@
+= Performance Monitoring
+The performance monitoring toolchain consists of a number of components including
+
+* A Collection Agent (collectd)
+* A Collection Aggregator/Relay (graphite)
+* A Data Store (whisperdb)
+* An API/Presentation Layer (grafana)
+
+These components and their interactions are laid out in the following diagram
+
+image::performance_monitoring_single_node_collectd.png[]
+
+== Installing the Performance Monitoring Suite
+=== Installing the Collection Aggregator/Relay
+Locate a bare metal system that meets the following minimum specifications
+
+* 4GB of Memory
+* Single Socket Xeon Class CPU
+* 500GB of Disk Space
+
+Do a fresh RHEL 7 or CentOS 7 basic install onto the machine. Then make sure
+the following channels are available to the machine via Subscription Manager
+or Satellite
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+First thing we will need to open the firewall on the machine to allow connections to graphite and grafana
+
+ firewall-cmd --zone=public --add-port=2003/tcp --permanent
+ firewall-cmd --zone=public --add-port=3000/tcp --permanent
+ firewall-cmd --reload
+
+Once that is done, install the graphite and grafana software by running the following command
+
+ yum install -y python-carbon graphite-web grafana httpd
+
+First we will configure the grafana web interface to allow access. Edit the file /etc/httpd/conf.d/graphite-web.conf and modify the following lines blow to look like the following (changing Require line)
+
+    <Directory "/usr/share/graphite/">
+        <IfModule mod_authz_core.c>
+            # Apache 2.4
+            Require all granted
+        </IfModule>
+
+Next we will synchronise the database behind graphite web. Run the following command (when prompted if you want to create a super user choose no)
+
+ sudo -u apache /usr/bin/graphite-manage syncdb --noinput
+
+Next we will start and enable all the graphite and grafana services
+
+ systemctl start httpd
+ systemctl enable httpd
+ systemctl start carbon-cache
+ systemctl enable carbon-cache
+ systemctl start grafana-server
+ systemctl enable grafana-server
+
+Now we will configure grafana to talk to our graphite instance. Go to the following address in your browser (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the host we have configured to store the centralised monitoring data
+
+ http://$FQDN_OF_PERFORMANCE_MONITORING_HOST:3000/
+
+You should be presented with the grafana login page. Enter in the default credentials of admin/admin to log into the system. Once you are logged in, click on the grafana logo in the top left of the screen, then choose "Data Sources". At the top of the page click "Add new", Enter in the following details
+
+ Name: graphite
+ Default: yes (tick)
+ Type: Graphite
+
+ Url: http://localhost/
+ Access: proxy
+ Basic Auth: no (unticked)
+
+Then click the "Add" button at the bottom.
+
+=== Installing the Performance Monitoring Collection Agent on all nodes
+To monitor the performance of all machines in the Openstack environment, you will need to make sure the following channel is enabled in Subscription Manager/Satellite on all machines
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+Once this is done, you will need to install the following packages on all Openstack machines
+
+ yum install -y collectd
+
+Next you will need to configure collectd on all machines to send their data to the performance monitoring aggregator/relay. Edit the file /etc/collectd.d/10-write_graphite.conf and place in it the following contents (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the host we configured previously to be the performance monitoring aggregator/relay)
+
+ <LoadPlugin write_graphite>
+   Globals false
+ </LoadPlugin>
+
+ <Plugin write_graphite>
+   <Carbon>
+     Host "$FQDN_OF_PERFORMANCE_MONITORING_HOST"
+     Port "2003"
+     Prefix "collectd."
+     EscapeCharacter "_"
+     StoreRates true
+     LogSendErrors true
+     Protocol "tcp"
+   </Carbon>
+ </Plugin>
+
+Now we need to start and enable collectd on all hosts
+
+ systemctl start collectd
+ systemctl enable collectd

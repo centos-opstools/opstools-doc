@@ -1,0 +1,145 @@
+= Availability Monitoring
+The avilability monitoring toolchain consists of a number of components including
+
+* A Monitoring Agent (sensu)
+* A Monitoring Relay/proxy (rabbitmq)
+* A Monitoring Controller/Server (sensu)
+* An API/Presentation Layer (uchiwa)
+
+These components and their interactions are laid out in the following diagram
+
+image::availability_monitoring_single_node.png[]
+
+== Installing the Availability Monitoring Suite
+=== Installing the Monitoring Relay/Controller
+Locate a bare metal system that meets the following minimum specifications
+
+* 4GB of Memory
+* Single Socket Xeon Class CPU
+* 100GB of Disk Space
+
+Do a fresh RHEL 7 or CentOS 7 basic install onto the machine. Then make sure
+the following channels are available to the machine via Subscription Manager
+or Satellite
+
+ rhel-7-server-openstack-7.0-optools-rpms
+
+First thing we will need to open the firewall on the machine to allow connections to rabbitmq and uchiwa
+
+ firewall-cmd --zone=public --add-port=5672/tcp --permanent
+ firewall-cmd --zone=public --add-port=3000/tcp --permanent
+ firewall-cmd --reload
+
+Now we need to install the components needed for the monitoring server
+
+ yum install -y sensu uchiwa redis rabbitmq-server
+
+First we will configure rabbitmq and redis which are the backbone services. Start both redis and rabbitmq and enable them at boot
+
+ systemctl start redis
+ systemctl enable redis
+ systemctl start rabbitmq
+ systemctl enable rabbitmq
+
+Now we will configure a new rabbitmq virtualhost for sensu, with a username and password combination that can access it.
+
+ rabbitmqctl add_vhost /sensu
+ rabbitmqctl add_user sensu sensu
+ rabbitmqctl set_permissions -p /sensu sensu ".*" ".*" ".*"
+
+Now that the base services are running and configured, we will configure the sensu monitoring server. Edit /etc/sensu/conf.d/rabbitmq.json and add the following contents to the file
+
+ {
+   "rabbitmq": {
+     "port": 5672,
+     "host": "localhost",
+     "user": "sensu",
+     "password": "sensu",
+     "vhost": "/sensu"
+   }
+ }
+
+Next edit /etc/sensu/conf.d/redis.json and add the following contents to the file
+
+ {
+   "redis": {
+     "port": 6379,
+     "host": "localhost"
+   }
+ }
+
+Finally edit /etc/sensu/conf.d/api.json and add the following contents to the file
+
+ {
+   "api": {
+     "bind": "0.0.0.0",
+     "port": 4567,
+     "host": "localhost"
+   }
+ }
+
+Now we will start and enable all sensu services
+
+ systemctl start sensu-server
+ systemctl enable sensu-server
+ systemctl start sensu-api
+ systemctl enable sensu-api
+
+Finally we need to configure Uchiwa, which is the web interface for sensu. To do this we edit the file /etc/uchiwa/uchiwa.json and add the following contents to the file
+
+ {
+   "sensu": [
+     {
+       "name": "Openstack",
+       "host": "localhost",
+       "port": 4567
+     }
+   ],
+   "uchiwa": {
+     "host": "0.0.0.0",
+     "port": 3000,
+     "refresh": 5
+   }
+ }
+
+Now we will start and enable the Uchiwa web interface
+
+ systemctl start uchiwa
+ systemctl enable uchiwa
+
+=== Installing the Availability Monitoring Agent on all nodes
+To monitor all machines in the Openstack environment, you will need to make sure the following channels are enabled in Subscription Manager/Satellite on all machines
+
+ rhel-7-server-openstack-7.0-optools-rpms
+ rhel-7-server-optional-rpms
+
+Once this is done, you will need to install the following packages on all Openstack machines
+
+ yum install -y sensu
+
+Next you will need to configure sensu agent on all machines. Edit the file /etc/sensu/conf.d/rabbitmq.json on all machines to have the following content (remeber to replace $FQDN_OF_MONITORING_SERVER with the hostname or ip address of your monitoring server configured in the previous section)
+
+ {
+   "rabbitmq": {
+     "port": 5672,
+     "host": "$FQDN_OF_MONITORING_SERVER",
+     "user": "sensu",
+     "password": "sensu",
+     "vhost": "/sensu"
+   }
+ }
+
+Now we need to edit the file /etc/sensu/conf.d/client.json on all machines to include the following content (remember to replace $FQDN with the hostname of the machine, and $ADDRESS with the public ip address of the machine)
+
+ {
+   "client": {
+     "name": "$FQDN",
+     "address": "$ADDRESS",
+     "subscriptions": [ "all" ]
+   }
+ }
+
+Finally we need to start and enable the sensu client on all machines
+
+ systemctl start sensu-client
+ systemctl enable sensu-client

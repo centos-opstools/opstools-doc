@@ -1,7 +1,20 @@
-all: index.html
+ALL = index.html availability-monitoring.html performance-monitoring.html centralised-logging.html
 
-index.html: index.txt
-	asciidoc -b html5 $<
+all: $(ALL)
+
+help:
+	@echo "Please use \`make <target>' where <target is one of"
+	@echo "  all      creates html files from txt"
+	@echo  "  clean    removes generated files"
+
+
+.PHONY: help clean all
+
+
+.SUFFIXES: .txt .html
+
+.txt.html:
+	asciidoc -b html5 -o $@ $<
 
 clean:
-	rm -f index.html
+	rm -f *.html
