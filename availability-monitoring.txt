@@ -68,6 +68,8 @@ Next edit /etc/sensu/conf.d/redis.json and add the following contents to the fil
    }
  }
 
+Note: Be careful when using "localhost" as the "host" value. It can resolve to ::1 if there is IPv6 enabled on host. In case you don't have Redis or RabbitMQ explicitly set to listen on ::1, Sensu will fail to connect and won't give you reasonable hint about the connection issues.
+
 Finally edit /etc/sensu/conf.d/api.json and add the following contents to the file
 
  {
