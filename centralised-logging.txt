@@ -108,22 +108,31 @@ Now we need to enable kibana (inside apache) to connect to elasticsearch, and th
  systemctl start httpd
  systemctl enable httpd
 
-== Installing the log collection agent on all nod
-To collect the logs from all machines in the Openstack environment and send them to your centralised logging server, you will need to make sure the following channel is enabled in Subscription Manager/Satellite on all machines
+== Installing the log collection agent on all nodes
+To collect the logs from all machines in the Openstack environment and send
+them to your centralised logging server, you will need to make sure the
+following channel is enabled in Subscription Manager/Satellite on all machines
 
  rhel-7-server-openstack-7.0-optools-rpms
 
-Once this is done, you will need to install the following packages on all Openstack machines
+Once this is done, you will need to install the following packages on all
+Openstack machines
 
  yum install -y fluentd rubygem-fluent-plugin-add
 
-Now you will need to configure the fluent user on all nodes so it has permissions to read all the Openstack log files. Do this by running the following command
+Now you will need to configure the fluent user on all nodes so it has
+permissions to read all the Openstack log files. Do this by running the
+following command
 
  for user in {keystone,nova,neutron,cinder,glance}; do  usermod -a -G $user fluentd; done
 
-Note that you may get an error on some nodes about missing groups. This is ok as not all nodes run all services.
+Note that you may get an error on some nodes about missing groups. This is
+ok as not all nodes run all services.
 
-Next you will need to configure fluentd on all the machines. Make sure the file /etc/fluentd/fluent.conf on all machines looks like the following (be sure to replace $FQDN_OF_LOGGING_SERVER with the dns name or IP of your centralised logging server configued above)
+Next you will need to configure fluentd on all the machines. Make sure the
+file /etc/fluentd/fluent.conf on all machines looks like the following (be
+sure to replace $FQDN_OF_LOGGING_SERVER with the dns name or IP of your
+centralised logging server configued above)
 
  # In v1 configuration, type and id are @ prefix parameters.
  # @type and @id are recommended. type and id are still available for backward compatibility
