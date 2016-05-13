@@ -18,11 +18,18 @@ Locate a bare metal system that meets the following minimum specifications
 * Single Socket Xeon Class CPU
 * 500GB of Disk Space
 
-Do a fresh RHEL 7 or CentOS 7 basic install onto the machine. Then make sure
+Do a fresh RHEL 7 basic install onto the machine. Then make sure
 the following channels are available to the machine via Subscription Manager
 or Satellite
 
  rhel-7-server-openstack-7.0-optools-rpms
+
+For CentOS, do a fresh basic install onto the machine. Enable opstools
+repository available from
+
+ (( to be filled out ))
+
+
 
 First thing we will need to open the firewall on the machine to allow connections to graphite and grafana
 
@@ -55,11 +62,18 @@ Next we will start and enable all the graphite and grafana services
  systemctl start grafana-server
  systemctl enable grafana-server
 
-Now we will configure grafana to talk to our graphite instance. Go to the following address in your browser (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the host we have configured to store the centralised monitoring data
+Now we will configure grafana to talk to our graphite instance. Go to the
+following address in your browser (where
+$FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the
+host we have configured to store the centralised monitoring data
 
  http://$FQDN_OF_PERFORMANCE_MONITORING_HOST:3000/
 
-You should be presented with the grafana login page. Enter in the default credentials of admin/admin to log into the system. Once you are logged in, click on the grafana logo in the top left of the screen, then choose "Data Sources". At the top of the page click "Add new", Enter in the following details
+You should be presented with the grafana login page. Enter in the default
+credentials of admin/admin to log into the system. Once you are logged in,
+click on the grafana logo in the top left of the screen, then choose "Data
+Sources". At the top of the page click "Add new", Enter in the following
+details
 
  Name: graphite
  Default: yes (tick)
@@ -72,15 +86,23 @@ You should be presented with the grafana login page. Enter in the default creden
 Then click the "Add" button at the bottom.
 
 === Installing the Performance Monitoring Collection Agent on all nodes
-To monitor the performance of all machines in the Openstack environment, you will need to make sure the following channel is enabled in Subscription Manager/Satellite on all machines
+To monitor the performance of all machines in the Openstack environment,
+you will need to make sure the following channel is enabled in Subscription
+Manager/Satellite on all machines
 
  rhel-7-server-openstack-7.0-optools-rpms
 
-Once this is done, you will need to install the following packages on all Openstack machines
+Once this is done, you will need to install the following packages on all
+Openstack machines
 
  yum install -y collectd
 
-Next you will need to configure collectd on all machines to send their data to the performance monitoring aggregator/relay. Edit the file /etc/collectd.d/10-write_graphite.conf and place in it the following contents (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP address of the host we configured previously to be the performance monitoring aggregator/relay)
+Next you will need to configure collectd on all machines to send their data
+to the performance monitoring aggregator/relay. Edit the file
+/etc/collectd.d/10-write_graphite.conf and place in it the following
+contents (where $FQDN_OF_PERFORMANCE_MONITORING_HOST is the hostname or IP
+address of the host we configured previously to be the performance
+monitoring aggregator/relay)
 
  <LoadPlugin write_graphite>
    Globals false
@@ -97,6 +119,11 @@ Next you will need to configure collectd on all machines to send their data to t
      Protocol "tcp"
    </Carbon>
  </Plugin>
+
+=== Configure OpenStack specific collectd plugins in collectd
+Collectd in its standard distribution already provides a few plugins suitable
+for monitoring OpenStack. However, some more advanced plugins can and should
+be installed and enabled.
 
 Now we need to start and enable collectd on all hosts
 
