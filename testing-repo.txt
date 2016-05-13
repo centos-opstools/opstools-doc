@@ -1,0 +1,15 @@
+= Repository for testing purposes
+
+WARNING: The contents of this repo will change without notice. It's a
+shared resource and not intended for end user consumption at all.
+
+== Repo file for CentOS
+
+Place a copy of this in /etc/yum.repos.d/centos-optools.repo
+
+ [centos-optools]
+ name=CentOS operational tools
+ baseurl=http://cbs.centos.org/repos/cloud7-openstack-optools-candidate/x86_64/os/
+ enabled=1
+ gpgcheck=0
+
