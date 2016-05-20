@@ -85,7 +85,7 @@ details
 
 Then click the "Add" button at the bottom.
 
-=== Installing the Performance Monitoring Collection Agent on all nodes
+== Installing the Performance Monitoring Collection Agent on all nodes
 To monitor the performance of all machines in the Openstack environment,
 you will need to make sure the following channel is enabled in Subscription
 Manager/Satellite on all machines
@@ -120,10 +120,61 @@ monitoring aggregator/relay)
    </Carbon>
  </Plugin>
 
-=== Configure OpenStack specific collectd plugins in collectd
+== Configure OpenStack specific collectd plugins in collectd
 Collectd in its standard distribution already provides a few plugins suitable
 for monitoring OpenStack. However, some more advanced plugins can and should
 be installed and enabled.
+
+=== Configure apache related monitoring
+To install the collectd plugin, run
+
+ yum install collectd-apache
+
+Create a file /etc/httpd/conf.d/16-server-status.conf:
+
+ LoadModule status_module modules/mod_status.so
+ <Location /server-status>
+    SetHandler server-status
+    Require host localhost
+ </Location>
+ ExtendedStatus On
+
+Change the file /etc/collect.d/apache.conf to read
+
+ LoadPlugin apache
+ <Plugin apache>
+   <Instance "localhost">
+      URL "http://localhost/server-status?auto"
+   </Instance>
+ </Plugin>
+
+
+=== Configure mysql monitoring
+
+First, a collectd-plugin needs to be installed
+
+ yum install collectd-mysql
+
+Create a monitoring user for be able to connect to
+mysql, and grant that user USAGE privileges:
+
+  CREATE USER 'monitoring'@'localhost' IDENTIFIED BY 'monitorpassword';
+   -- Give appropriate permissions
+   -- ("GRANT USAGE" is synonymous to "no privileges")
+  GRANT USAGE ON *.* TO 'monitoring'@'localhost';
+  FLUSH PRIVILEGES;
+
+Change the file /etc/collectd.d/mysql.conf:
+
+ LoadPlugin mysql
+ <Plugin mysql>
+   <Database "nova">
+     Host "localhost"
+     User "monitoring"
+     Password "monitorpassword"
+     Socket "/var/lib/mysql/mysql.sock"
+   </Database>
+ </Plugin>
 
 Now we need to start and enable collectd on all hosts
 
