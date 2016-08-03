@@ -125,14 +125,14 @@ Now you will need to configure the fluent user on all nodes so it has
 permissions to read all the Openstack log files. Do this by running the
 following command
 
- for user in {keystone,nova,neutron,cinder,glance,,heat,ceilometer,sahara,ironic}; do  usermod -a -G $user fluentd; done
+ for user in {keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic}; do  usermod -a -G $user fluentd; done
 
 Note that you may get an error on some nodes about missing groups. This is
 ok as not all nodes run all services.
 
-Some of the /var/log/{keystone,nova,neutron,cinder,glance,,heat,ceilometer,sahara,ironic} directories do not have the proper group so:
+Some of the /var/log/{keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic} directories do not have the proper group so:
 
- for dir in {keystone,nova,neutron,cinder,glance,,heat,ceilometer,sahara,ironic}; do chown $dir:$dir /var/log/$dir; done
+ for dir in {keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic}; do chown $dir:$dir /var/log/$dir; done
 
 Next you will need to configure fluentd on all the machines. Make sure the
 file /etc/fluentd/fluent.conf on all machines looks like the following (be
