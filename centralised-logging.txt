@@ -61,6 +61,7 @@ Once this is done, we now need to configure fluentd to accept log data and write
    bind 0.0.0.0
  </source>
 
+ #This must be placed at the end of the file as it will process everything
  <match **>
    @type elasticsearch
    host localhost
@@ -124,15 +125,20 @@ Now you will need to configure the fluent user on all nodes so it has
 permissions to read all the Openstack log files. Do this by running the
 following command
 
- for user in {keystone,nova,neutron,cinder,glance}; do  usermod -a -G $user fluentd; done
+ for user in {keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic}; do  usermod -a -G $user fluentd; done
 
 Note that you may get an error on some nodes about missing groups. This is
 ok as not all nodes run all services.
+
+Some of the /var/log/{keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic} directories do not have the proper group so:
+
+ for dir in {keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic}; do chown $dir:$dir /var/log/$dir; done
 
 Next you will need to configure fluentd on all the machines. Make sure the
 file /etc/fluentd/fluent.conf on all machines looks like the following (be
 sure to replace $FQDN_OF_LOGGING_SERVER with the dns name or IP of your
 centralised logging server configued above)
+
 
  # In v1 configuration, type and id are @ prefix parameters.
  # @type and @id are recommended. type and id are still available for backward compatibility
