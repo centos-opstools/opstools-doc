@@ -120,6 +120,10 @@ monitoring aggregator/relay)
    </Carbon>
  </Plugin>
 
+When using SELinux, make sure to execute
+
+ setsebool collectd_tcp_network_connect=1
+
 == Configure OpenStack specific collectd plugins in collectd
 Collectd in its standard distribution already provides a few plugins suitable
 for monitoring OpenStack. However, some more advanced plugins can and should
