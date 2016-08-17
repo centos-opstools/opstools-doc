@@ -5,6 +5,10 @@ OS - OPSTOOLS - OSCHECKS - MONITORING
 :Date:     2016-Agust-05
 :Revision: v1
 
+== Installation
+
+[source,bash]
+yum install osops-tools-monitoring-oschecks 
 
 == Usage
 
