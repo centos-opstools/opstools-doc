@@ -6,3 +6,6 @@ shared resource and not intended for end user consumption at all.
 == Repo file for CentOS
 
 Place a copy of https://raw.githubusercontent.com/centos-opstools/opstools-repo/master/opstools.repo[this repo file] to your /etc/yum.repos.d.
+
+or use 
+  yum install http://buildlogs.centos.org/centos/7/opstools/x86_64/common/centos-release-opstools-1-2.el7.noarch.rpm
