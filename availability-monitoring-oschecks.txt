@@ -10,6 +10,18 @@ OS - OPSTOOLS - OSCHECKS - MONITORING
 [source,bash]
 yum install osops-tools-monitoring-oschecks 
 
+NOTE: If there is a plan to use either oschecks-check_ceph_df or oschecks-check_ceph_health, you should execute:
+[source,bash]
+sudo cat /etc/ceph/ceph.client.admin.keyring >> /etc/ceph/ceph.conf
+
+Otherwise a very similar of the bellow error will show up
+[source, bash]
+[heat-admin@overcloud-controller-0 ceph]$ /usr/libexec/openstack-monitoring/checks/oschecks-check_ceph_df 
+CEPH UNKNOWN: 2016-08-19 15:42:23.883982 7f07f37c3700 -1 monclient(hunting): ERROR: missing keyring, cannot use cephx for authentication
+2016-08-19 15:42:23.883983 7f07f37c3700  0 librados: client.admin initialization error (2) No such file or directory
+Error connecting to cluster: ObjectNotFound
+
+
 == Usage
 
 .oschecks-check_amqp
@@ -23,11 +35,6 @@ oschecks-check_amqp sensu-client
 Checks the amount os meters beeing used
 [source,bash]
 oschecks-check_ceilometer_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
-
-//.oschecks-check_glance_api
-
-//[source,bash]
-//oschecks-check_glance_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
 
 .oschecks-check_cinder_api
   
@@ -48,11 +55,6 @@ Get the amount of flavors
 [source,bash]
 oschecks-check_nova_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
    
-//.oschecks-check_neutron_floating_ip
-
-//[source,bash]
-//oschecks-check_neutron_floating_ip --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
-
 
 .oschecks-check_cinder_volume
 
@@ -67,28 +69,19 @@ It checks the existing of ta already created volume(for testing purpose), and al
 [source,bash]
 oschecks-check_cinder_volume  --username USER --password PASSWORD --auth_url AUTH_URL --tenant TENANT
 
-//.oschecks-check_ceph_health        
-  
-//[source,bash]
-//oschecks-check_ceph_health --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+.oschecks-check_ceph_health        
+It only execute the command *ceph healht* and parse the result to get a sensu result (0,1,2,3)
+
+[source,bash]
+oschecks-check_ceph_health 
 
 
-//.oschecks-check_ceph_df            
-  
-//[source,bash]
-//oschecks-check_ceph_df --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+.oschecks-check_ceph_df            
+It checks the size of the global cepth storage.
+Before checking the used percentage, it check the correctness of the data (total=available+used)
 
-
-//.oschecks-check_glance_image_exists
-
-//[source,bash]
-//oschecks-check_glance_image_exists --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
-
-
-//.oschecks-check_glance_upload
-
-//[source,bash]
-//oschecks-check_glance_upload --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+[source,bash]
+oschecks-check_ceph_df PERCENTAGE_WARNING_THREDSHOLD  PERCENTAGE_CRITICAL_THREDSHOLD 
 
 
 .oschecks-check_nova_instance
@@ -105,11 +98,6 @@ This is a full check of creating/deleting an instance.
 [source,bash]
 oschecks-check_nova_instance --os-username USER --os-password PASSWORD --os-auth-url AUTH_URL  --os-tenant-name TENANT
 
-
-//.oschecks-pacemaker_host_check
-
-//[source,bash]
-//oschecks-pacemaker_host_check --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
 
 
 == How to configure Sensu to use them
