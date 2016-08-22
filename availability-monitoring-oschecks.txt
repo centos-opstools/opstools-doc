@@ -70,7 +70,7 @@ It checks the existing of ta already created volume(for testing purpose), and al
 oschecks-check_cinder_volume  --username USER --password PASSWORD --auth_url AUTH_URL --tenant TENANT
 
 .oschecks-check_ceph_health        
-It only execute the command *ceph healht* and parse the result to get a sensu result (0,1,2,3)
+It only execute the command *ceph health* and parse the result to get a sensu result (0,1,2,3)
 
 [source,bash]
 oschecks-check_ceph_health 
