@@ -1,0 +1,251 @@
+OS - OPSTOOLS - OSCHECKS - MONITORING
+=====================================
+:Author:   Juan Badia Payno
+:Email:    jbadiapa@redhat.com
+:Date:     2016-Agust-05
+:Revision: v1
+
+== Installation
+
+[source,bash]
+yum install osops-tools-monitoring-oschecks 
+
+NOTE: If there is a plan to use either oschecks-check_ceph_df or oschecks-check_ceph_health, you should execute:
+[source,bash]
+sudo cat /etc/ceph/ceph.client.admin.keyring >> /etc/ceph/ceph.conf
+
+Otherwise a very similar of the bellow error will show up
+[source, bash]
+[heat-admin@overcloud-controller-0 ceph]$ /usr/libexec/openstack-monitoring/checks/oschecks-check_ceph_df 
+CEPH UNKNOWN: 2016-08-19 15:42:23.883982 7f07f37c3700 -1 monclient(hunting): ERROR: missing keyring, cannot use cephx for authentication
+2016-08-19 15:42:23.883983 7f07f37c3700  0 librados: client.admin initialization error (2) No such file or directory
+Error connecting to cluster: ObjectNotFound
+
+
+== Usage
+
+.oschecks-check_amqp
+Checks whether the program is running and is connected to the AMQP 
+
+[source,bash]
+oschecks-check_amqp sensu-client
+
+.oschecks-check_ceilometer_api
+
+Checks the amount os meters beeing used
+[source,bash]
+oschecks-check_ceilometer_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+
+.oschecks-check_cinder_api
+  
+Check the list of the quotas by a user
+[source,bash]
+oschecks-check_cinder_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+
+.oschecks-check_keystone_api
+
+Check how long it takes to get the token. There is a warning alarm if it takes longer than 10 seconds
+
+[source,bash]
+oschecks-check_keystone_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+
+.oschecks-check_nova_api
+
+Get the amount of flavors
+[source,bash]
+oschecks-check_nova_api --os-username USER --os-password PASSWORD --os-tenant-name TENANT  --os-auth-url AUTH_URL
+   
+
+.oschecks-check_cinder_volume
+
+It checks the existing of ta already created volume(for testing purpose), and also the creation/delete of a volume
+
+. Check the existence of the volume
+. Create a volume
+. Check the status of the volume
+. Delete the volume
+. Ensure the volume was deleted
+
+[source,bash]
+oschecks-check_cinder_volume  --username USER --password PASSWORD --auth_url AUTH_URL --tenant TENANT
+
+.oschecks-check_ceph_health        
+It only execute the command *ceph health* and parse the result to get a sensu result (0,1,2,3)
+
+[source,bash]
+oschecks-check_ceph_health 
+
+
+.oschecks-check_ceph_df            
+It checks the size of the global cepth storage.
+Before checking the used percentage, it check the correctness of the data (total=available+used)
+
+[source,bash]
+oschecks-check_ceph_df PERCENTAGE_WARNING_THREDSHOLD  PERCENTAGE_CRITICAL_THREDSHOLD 
+
+
+.oschecks-check_nova_instance
+
+This is a full check of creating/deleting an instance.
+
+. Get an Image
+. Get a Flavor
+. Create an Instance
+. Check the Instance
+. Delete the Instance
+. Ensure the Instance was deleted
+
+[source,bash]
+oschecks-check_nova_instance --os-username USER --os-password PASSWORD --os-auth-url AUTH_URL  --os-tenant-name TENANT
+
+
+
+== How to configure Sensu to use them
+
+
+First of all we need to know some Openstack parameters.
+
+. username
+. password
+. auth URL
+. tenant
+
+
+To configure all these parameters to a especific node we need to add the above parameters on the *client {}* json object as 
+it is shown on the following example.
+
+[source,json]
+"client": {
+   "name": "overcloud-controller-0",
+   ...
+   "openstack" :{
+       "username" : "USER",
+       "password" : "PASSWORD",
+       "tenant_name" : "TENANT",
+       "auth_url" : "AUTH_URL"
+     },
+     "redact": [
+        "username","tenant_name","auth_url","password"
+      ]
+    ...
+}
+
+
+To pass a defined argument to a check command, only the *:::Argument|default_value:::* needs to be set. 
+For example *:::openstack.username|admin:::* on our previous definition 
+
+
+By default password is not showed (*REDACTED*) either on the logs or the web, however if we want more arguments not to be 
+showed we need to define the *"redact"* parameter with all the arguments even with the default-ones.
+
+
+== Sensu Command Example
+
+[source,json]
+"oschecks-check-ceilometer-api": {
+            "command": "/usr/libexec/openstack-monitoring/checks/oschecks-check_ceilometer_api -w :::api.warning|10::: -c :::api.critical|20::: --os-username :::openstack.username|admin::: --os-password :::openstack.password|passw::: --os-project-name :::openstack.project_name|admin::: --os-auth-url :::openstack.auth_url|http://controller:5000/v2.0::: --os-tenant-name :::openstack.tenant_name|admin::: ",
+            "subscribers": [
+                "overcloud-controller"
+            ],
+            "interval": 60
+        }
+ 
+.command
+* */usr/libexec/openstack-monitoring/checks/oschecks-check_ceilometer_api* Path to the program
+* *-w* The warning threshold 
+** *:::api.warning|10:::* Time in seconds, when the response takes longer than this limit a warning alarm will be gone off
+* *-c* The critical threshold
+** *:::api.critical|20:::* Time in seconds, when the response takes longer than this limit a critical alarm will be gone off
+* *--os-username* Parameter to set the username
+** *:::openstack.username|admin:::* If it is not defined on the client, by default admin is used
+* *--os-password* Parameter to set the password
+** *:::openstack.password|passw:::* If it is not defined on the client, by default passw is used
+* *--os-project-name* Parameter to set the password
+** *:::openstack.project_name|admin:::* If it is not defined on the client, by default admin is used 
+* *--os-auth-url* Parameter to set authentication URL
+** *:::openstack.auth_url|http://controller:5000/v2.0:::* If it is not defined on the client, by default http://controller:5000/v2.0 is used
+* *--os-tenant-name* Parameter to set the tenant name
+** *:::openstack.tenant_name|admin:::* If it is not defined on the client, by default admin is used
+    
+
+.subscribers
+To which groups of servers is going to be defined the check to be run. Be carefull with *all* as only clients subcribes to *all* will execute the check.
+
+.interval
+The frequency in seconds the check is executed
+
+== Package Content
+
+.Openstack Monitoring
+
+The installation path is /usr/libexec/openstack-monitoring/checks/
+....
+/usr/libexec/openstack-monitoring/checks/
+├── oschecks-check_amqp
+├── oschecks-check_ceilometer_api
+├── oschecks-check_ceph_df
+├── oschecks-check_ceph_health
+├── oschecks-check_cinder_api
+├── oschecks-check_cinder_volume
+├── oschecks-check_glance_api
+├── oschecks-check_glance_image_exists
+├── oschecks-check_glance_upload
+├── oschecks-check_keystone_api
+├── oschecks-check_neutron_api
+├── oschecks-check_neutron_floating_ip
+├── oschecks-check_nova_api
+├── oschecks-check_nova_instance
+└── oschecks-pacemaker_host_check
+....
+The libraries are installed on /usr/lib/python2.7/site-packages/oschecks
+....
+/usr/lib/python2.7/site-packages/oschecks
+├── amqp.py
+├── amqp.pyc
+├── amqp.pyo
+├── ceilometer.py
+├── ceilometer.pyc
+├── ceilometer.pyo
+├── ceph.py
+├── ceph.pyc
+├── ceph.pyo
+├── cinder.py
+├── cinder.pyc
+├── cinder.pyo
+├── glance.py
+├── glance.pyc
+├── glance.pyo
+├── __init__.py
+├── __init__.pyc
+├── __init__.pyo
+├── keystone.py
+├── keystone.pyc
+├── keystone.pyo
+├── neutron.py
+├── neutron.pyc
+├── neutron.pyo
+├── nova.py
+├── nova.pyc
+├── nova.pyo
+├── pacemaker_host_check.py
+├── pacemaker_host_check.pyc
+├── pacemaker_host_check.pyo
+├── process.py
+├── process.pyc
+├── process.pyo
+├── tests
+│   ├── __init__.py
+│   ├── __init__.pyc
+│   ├── __init__.pyo
+│   ├── test_ceph.py
+│   ├── test_ceph.pyc
+│   ├── test_ceph.pyo
+│   ├── test_script.py
+│   ├── test_script.pyc
+│   └── test_script.pyo
+├── utils.py
+├── utils.pyc
+└── utils.pyo
+....
+
+
