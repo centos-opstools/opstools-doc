@@ -1,0 +1,8 @@
+language: ruby
+rvm:
+- "2.0"
+sudo: false
+install: gem install asciidoctor
+script: asciidoctor -b html5 *.txt
+
+
