@@ -21,6 +21,10 @@ CEPH UNKNOWN: 2016-08-19 15:42:23.883982 7f07f37c3700 -1 monclient(hunting): ERR
 2016-08-19 15:42:23.883983 7f07f37c3700  0 librados: client.admin initialization error (2) No such file or directory
 Error connecting to cluster: ObjectNotFound
 
+NOTE: The oschecks-pacemaker_host_check command is using either "pcs status" or "crm_mon -1" to use them you should be able to execute the 
+command as that users
+[source, bash]
+usermod -G haclient USER #To be able to run "crm_mon -1"
 
 == Usage
 
@@ -97,6 +101,16 @@ This is a full check of creating/deleting an instance.
 
 [source,bash]
 oschecks-check_nova_instance --os-username USER --os-password PASSWORD --os-auth-url AUTH_URL  --os-tenant-name TENANT
+
+
+.oschecks-pacemaker_host_check
+
+It checks the status of a resource on the cluster, if it is running on server it will execute the given FULL_PATH_SCRIPT [if 
+there is none script given a default message will show up]
+By default, the command execute "pcs status" and parse the output. With the --crm flag the command will be "crm_mon -1"
+
+[source,bash]
+oschecks-pacemaker_host_check -r RESOURCE [-s FULL_PATH_SCRIPT] [--crm]
 
 
 
