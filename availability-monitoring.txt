@@ -1,5 +1,5 @@
 = Availability Monitoring
-The avilability monitoring toolchain consists of a number of components including
+The availability monitoring toolchain consists of a number of components including
 
 * A Monitoring Agent (sensu)
 * A Monitoring Relay/proxy (rabbitmq)
