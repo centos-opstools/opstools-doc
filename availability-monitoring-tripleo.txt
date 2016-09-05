@@ -1,0 +1,25 @@
+= Availability Monitoring clients via TripleO
+This document describes required steps to install Sensu client services on overcloud nodes deployed by TripleO.
+
+== Availability Monitoring Agents using TripleO CLI
+
+NOTE: Please note that to successfully deploy monitoring agents on overcloud nodes, you need to have monitoring server up and running prior of running TripleO deployment. The monitoring agents require information about running RabbitMQ instance to which they have to connect to.
+
+To install sensu-client service on every node on overcloud during overcloud deployment, you will need to activate SensuClient composable service. To do so, just override default resource type (OS::Heat::None) to the correct resource template, which is located in your tripleo-heat-templates directory at path "./puppet/services/monitoring/sensu-client.yaml". You will also need to set following parameters, to have deployment successful:
+
+MonitoringRabbitHost::
+    RabbitMQ instance for monitoring purposes. Sensu clients will connect to this instance for checks subscriptions.
+MonitoringRabbitPort::
+    Port on which monitoring RabbitMQ instance is listeng
+MonitoringRabbitUserName::
+    Username with which sensu-client service should connect to RabbitMQ isntance
+MonitoringRabbitPassword::
+    Password with which sensu-client service should connect to RabbitMQ isntance
+MonitoringRabbitUseSSL::
+    Whether sensu-clients should communicate via SSL with RabbitMQ instance
+MonitoringRabbitVhost::
+    RabbitMQ VHOST which should be used for monitoring purposes
+SensuClientCustomConfig::
+    Hash containing custom configuration, for sensu clients. You can put there configuration used in check execution for example
+
+For setting the above, you can use prepared environment file from your tripleo-heat-templates directory at patch ./environments/monitoring-environment.yaml.
