@@ -86,14 +86,14 @@ details
 Then click the "Add" button at the bottom.
 
 == Installing the Performance Monitoring Collection Agent on all nodes
-To monitor the performance of all machines in the Openstack environment,
+To monitor the performance of all machines in the OpenStack environment,
 you will need to make sure the following channel is enabled in Subscription
 Manager/Satellite on all machines
 
  rhel-7-server-openstack-7.0-optools-rpms
 
 Once this is done, you will need to install the following packages on all
-Openstack machines
+OpenStack machines
 
  yum install -y collectd
 
