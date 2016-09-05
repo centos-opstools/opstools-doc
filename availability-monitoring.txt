@@ -109,6 +109,8 @@ Now we will start and enable the Uchiwa web interface
  systemctl start uchiwa
  systemctl enable uchiwa
 
+Next step on the server side of Sensu stack is definition of checks and alert handlers. For monitoring OpenStack services you can use link:availability-monitoring-oschecks.html[monitoring-for-openstack checks].
+
 === Installing the Availability Monitoring Agent on all nodes
 To monitor all machines in the Openstack environment, you will need to make sure the following channels are enabled in Subscription Manager/Satellite on all machines
 
