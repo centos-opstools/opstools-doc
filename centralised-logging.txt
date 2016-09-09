@@ -110,19 +110,19 @@ Now we need to enable kibana (inside apache) to connect to elasticsearch, and th
  systemctl enable httpd
 
 == Installing the log collection agent on all nodes
-To collect the logs from all machines in the Openstack environment and send
+To collect the logs from all machines in the OpenStack environment and send
 them to your centralised logging server, you will need to make sure the
 following channel is enabled in Subscription Manager/Satellite on all machines
 
  rhel-7-server-openstack-7.0-optools-rpms
 
 Once this is done, you will need to install the following packages on all
-Openstack machines
+OpenStack machines
 
  yum install -y fluentd rubygem-fluent-plugin-add
 
 Now you will need to configure the fluent user on all nodes so it has
-permissions to read all the Openstack log files. Do this by running the
+permissions to read all the OpenStack log files. Do this by running the
 following command
 
  for user in {keystone,nova,neutron,cinder,glance,heat,ceilometer,sahara,ironic}; do  usermod -a -G $user fluentd; done

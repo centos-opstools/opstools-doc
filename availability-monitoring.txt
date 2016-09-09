@@ -1,5 +1,5 @@
 = Availability Monitoring
-The avilability monitoring toolchain consists of a number of components including
+The availability monitoring toolchain consists of a number of components including
 
 * A Monitoring Agent (sensu)
 * A Monitoring Relay/proxy (rabbitmq)
@@ -92,7 +92,7 @@ Finally we need to configure Uchiwa, which is the web interface for sensu. To do
  {
    "sensu": [
      {
-       "name": "Openstack",
+       "name": "OpenStack",
        "host": "localhost",
        "port": 4567
      }
@@ -109,13 +109,15 @@ Now we will start and enable the Uchiwa web interface
  systemctl start uchiwa
  systemctl enable uchiwa
 
+Next step on the server side of Sensu stack is definition of checks and alert handlers. For monitoring OpenStack services you can use link:availability-monitoring-oschecks.html[monitoring-for-openstack checks].
+
 === Installing the Availability Monitoring Agent on all nodes
-To monitor all machines in the Openstack environment, you will need to make sure the following channels are enabled in Subscription Manager/Satellite on all machines
+To monitor all machines in the OpenStack environment, you will need to make sure the following channels are enabled in Subscription Manager/Satellite on all machines
 
  rhel-7-server-openstack-7.0-optools-rpms
  rhel-7-server-optional-rpms
 
-Once this is done, you will need to install the following packages on all Openstack machines
+Once this is done, you will need to install the following packages on all OpenStack machines
 
  yum install -y sensu
 

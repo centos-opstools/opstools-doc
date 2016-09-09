@@ -117,7 +117,7 @@ oschecks-pacemaker_host_check -r RESOURCE [-s FULL_PATH_SCRIPT] [--crm]
 == How to configure Sensu to use them
 
 
-First of all we need to know some Openstack parameters.
+First of all we need to know some OpenStack parameters.
 
 . username
 . password
@@ -190,7 +190,7 @@ The frequency in seconds the check is executed
 
 == Package Content
 
-.Openstack Monitoring
+.OpenStack Monitoring
 
 The installation path is /usr/libexec/openstack-monitoring/checks/
 ....

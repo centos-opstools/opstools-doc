@@ -1,18 +1,17 @@
-= Openstack Operational Tools
+= OpenStack Operational Tools
 Graeme Gillies <ggillies@redhat.com>
 Matthias Runge <mrunge@redhat.com>
 
 == Overview
-Red Hat Openstack comes with an optional suite of tools designed to help operators maintain an Openstack environment. The tools perform the following functions
+RDO comes with an optional suite of tools designed to help operators maintain an OpenStack environment. The tools perform the following functions
 
 * link:centralised-logging.html[Centralised Logging]
 * link:availability-monitoring.html[Availability Monitoring]
 * link:performance-monitoring.html[Performance Monitoring]
 
-This document will go through the preparation and installation of these tools
+The documents above will go through the preparation and manual installation of these tools. For automated installation of the tools, please check following documents:
 
-WARNING: The Red Hat Openstack Operational Tool Suite is currently Tech Preview
-
+* link:availability-monitoring-tripleo.html[Availability Monitoring Agents via TripleO]
 
 == Architecture
 
@@ -29,7 +28,7 @@ These components and their interactions are laid out in the following diagram
 image::centralised_logging_single_node_fluentd.png[]
 
 === Availability Monitoring
-The avilability monitoring toolchain consists of a number of components including
+The availability monitoring toolchain consists of a number of components including
 
 * A Monitoring Agent (sensu)
 * A Monitoring Relay/proxy (rabbitmq)
