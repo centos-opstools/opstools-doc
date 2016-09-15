@@ -10,11 +10,21 @@ Do a fresh RHEL 7.1 basic install onto the machine. Then make sure the following
 
  rhel-7-server-openstack-7.0-optools-rpms
 
+Kibana is a web application so it can be used directly to port 5601, or using the apache http server as a proxy. We suggest to use the apache http server as a 
+proxy to kibana, for several reasons (it is easier to have the port 80 open on the firewalls, the apache http server can be configured to use authentication, a
+https can be used...).  
+
 First thing we will need to open the firewall on the machine to allow connections to fluentd and apache
+
+
 
  firewall-cmd --zone=public --add-port=4000/tcp --permanent
  firewall-cmd --zone=public --add-service=http --permanent
- firewall-cmd --zone=public --add-port=5601/tcp --permanent #Optional (to use kibana directly)
+
+.To use kibana directly
+[NOTE] 
+firewall-cmd --zone=public --add-port=5601/tcp --permanent 
+
  firewall-cmd --reload
 
 Once that is done, install the fluentd and elasticsearch software with the following commands
@@ -80,22 +90,32 @@ Check the journal for fluentd and ensure it has no errors at start
 
  journalctl -u fluentd -l -f
 
-Finally we will configure kibana to point to our elasticsearch instace. Create the file /etc/httpd/conf.d/kibana.conf and place the following content inside
+
+.Configure apache http server as a proxy
+[NOTE]
+===============================
+Create the file /etc/httpd/conf.d/kibana.conf and place the following content inside
+
 
  <VirtualHost *:80>
-
-   ProxyPass / http://127.0.0.1:5601/
-   ProxyPassReverse / http://127.0.0.1:5601/
-
+  <Location />
+    ProxyPassMatch  http://127.0.0.1:5601/
+    ProxyPassReverse  http://127.0.0.1:5601/
+  </Location>
  </VirtualHost>
 
-Now we need to enable kibana (inside apache) to connect to elasticsearch, and then start httpd and enable it at boot
+Apache http server needs to enable the network connection, start the service and enable it at boot
 
  setsebool -P httpd_can_network_connect 1
- systemctl start kibana
- systemctl enable kibana
  systemctl start httpd
  systemctl enable httpd
+
+===============================
+
+Start kibana and configure it to start at boot
+
+ systemctl start kibana
+ systemctl enable kibana
 
 == Installing the log collection agent on all nodes
 To collect the logs from all machines in the OpenStack environment and send
