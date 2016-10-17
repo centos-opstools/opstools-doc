@@ -18,11 +18,11 @@ Locate a bare metal system that meets the following minimum specifications
 * Single Socket Xeon Class CPU
 * 100GB of Disk Space
 
-Do a fresh RHEL 7 or CentOS 7 basic install onto the machine. Then make sure
-the following channels are available to the machine via Subscription Manager
-or Satellite
+Do a fresh CentOS 7 basic install onto the machine. The required repositories
+are enabled by
 
- rhel-7-server-openstack-7.0-optools-rpms
+    yum install http://buildlogs.centos.org/centos/7/opstools/x86_64/common/centos-release-opstools-1-2.el7.noarch.rpm
+
 
 First thing we will need to open the firewall on the machine to allow connections to rabbitmq and uchiwa
 

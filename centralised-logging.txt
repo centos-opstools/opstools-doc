@@ -6,9 +6,11 @@ Locate a bare metal system that meets the following minimum specifications
 * Single Socket Xeon Class CPU
 * 500GB of Disk Space
 
-Do a fresh RHEL 7.1 basic install onto the machine. Then make sure the following channels are available to the machine via Subscription Manager or Satellite
+Do a fresh CentOS 7 basic install onto the machine. The required repositories
+are enabled by
 
- rhel-7-server-openstack-7.0-optools-rpms
+    yum install http://buildlogs.centos.org/centos/7/opstools/x86_64/common/centos-release-opstools-1-2.el7.noarch.rpm
+
 
 Kibana is a web application so it can be used directly to port 5601, or using the apache http server as a proxy. We suggest to use the apache http server as a 
 proxy to kibana, for several reasons (it is easier to have the port 80 open on the firewalls, the apache http server can be configured to use authentication, a
