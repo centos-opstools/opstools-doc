@@ -11,11 +11,20 @@ are enabled by
 
     yum install http://buildlogs.centos.org/centos/7/opstools/x86_64/common/centos-release-opstools-1-2.el7.noarch.rpm
 
+Kibana is a web application so it can be used directly to port 5601, or using the apache http server as a proxy. We suggest to use the apache http server as a 
+proxy to kibana, for several reasons (it is easier to have the port 80 open on the firewalls, the apache http server can be configured to use authentication, a
+https can be used...).  
 
 First thing we will need to open the firewall on the machine to allow connections to fluentd and apache
 
  firewall-cmd --zone=public --add-port=4000/tcp --permanent
  firewall-cmd --zone=public --add-service=http --permanent
+
+.To use kibana directly
+[NOTE] 
+firewall-cmd --zone=public --add-port=5601/tcp --permanent 
+
+
  firewall-cmd --reload
 
 Once that is done, install the fluentd and elasticsearch software with the following commands
@@ -81,35 +90,31 @@ Check the journal for fluentd and ensure it has no errors at start
 
  journalctl -u fluentd -l -f
 
-Finally we will configure kibana to point to our elasticsearch instace. Create the file /etc/httpd/conf.d/kibana3.conf and place the following content inside
+.Configure apache http server as a proxy
+[NOTE]
+===============================
+Create the file /etc/httpd/conf.d/kibana.conf and place the following content inside
 
- <VirtualHost *:80>
+Listen 80 
+<VirtualHost *:80>
+  RewriteEngine On
+  ProxyRequests Off
 
-   DocumentRoot /usr/share/kibana
-   <Directory /usr/share/kibana>
-     Require all granted
-     Options -Multiviews
-   </Directory>
+  RewriteRule /kibana(.*) http://localhost:5601$1 [P]
 
-   # Proxy for _aliases and .*/_search
-   <LocationMatch "^/(_nodes|_aliases|.*/_aliases|_search|.*/_search|_mapping|.*/_mapping)$">
-     ProxyPassMatch http://127.0.0.1:9200/$1
-     ProxyPassReverse http://127.0.0.1:9200/$1
-   </LocationMatch>
+  <Location /kibana>
+    ProxyPassReverse http://localhost:5601/
+  </Location>
 
-   # Proxy for kibana-int/{dashboard,temp}
-   <LocationMatch "^/(kibana-int/dashboard/|kibana-int/temp)(.*)$">
-     ProxyPassMatch http://127.0.0.1:9200/$1$2
-     ProxyPassReverse http://127.0.0.1:9200/$1$2
-   </LocationMatch>
+</VirtualHost>
 
- </VirtualHost>
-
-Now we need to enable kibana (inside apache) to connect to elasticsearch, and then start httpd and enable it at boot
+Apache http server needs to enable the network connection, start the service and enable it at boot
 
  setsebool -P httpd_can_network_connect 1
  systemctl start httpd
  systemctl enable httpd
+
+===============================
 
 == Installing the log collection agent on all nodes
 To collect the logs from all machines in the OpenStack environment and send
