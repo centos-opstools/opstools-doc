@@ -1,3 +1,5 @@
-# UUID                                  	Group Name
-#
-3ef7b2f109c9082c70c8fe1f5d916a32346efeb5	centos-opstools/opstools-doc-ptl
+# UUID          Group Name
+False 	Non-Interactive Users
+60b2a9e61c3a4ff65cd81a768d96f0ec76285557       	centos-opstools/opstools-doc-core
+3ef7b2f109c9082c70c8fe1f5d916a32346efeb5        	centos-opstools/opstools-doc-ptl
+global:Registered-Users		Registered Users
