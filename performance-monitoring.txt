@@ -33,7 +33,9 @@ Once that is done, install the graphite and grafana software by running the foll
 
  yum install -y python-carbon graphite-web grafana httpd
 
-First we will configure the grafana web interface to allow access. Edit the file /etc/httpd/conf.d/graphite-web.conf and modify the following lines blow to look like the following (changing Require line)
+First we will configure the grafana web interface to allow access. Edit
+or create the file /etc/httpd/conf.d/graphite-web.conf and modify the
+following lines blow to look like the following (changing Require line)
 
     <Directory "/usr/share/graphite/">
         <IfModule mod_authz_core.c>
