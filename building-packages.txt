@@ -1,0 +1,80 @@
+Package building
+================
+
+Intro
+-----
+
+Packages are being built in [cbs](http://cbs.centos.org/koji/index), the
+CentOS build system. For OpsTools, there are a few build targets available,
+intended to separate content on the build side.
+
+Build tags are named after their major package components:
+
+  - opstools7-fluentd-012-[candidate|testing|release] for fluentd-0.12 (and related logging packages)
+  - opstools7-sensu-027-[candidate|testing|release] for sensu-0.27 (and related packages) for availability monitoring
+  - opstools7-perfmon-[candidate|testing|release] for performance monitoring
+
+
+
+Testing packages
+----------------
+
+Packages tagged for -testing are being synced twice a day to
+https://buildlogs.centos.org/centos/7/opstools/
+
+
+Released packages
+-----------------
+
+Packages tagged for -release are being synced to
+http://mirror.centos.org/centos-7/7/opstools/
+
+
+Building packages
+-----------------
+
+Unfortunately, there is no SCM yet. The OpsTools SIG is collecting
+spec files under the https://github.com/centos-opstools[github organization].
+
+For building the packages on the CentOS build system, you need to become a
+member of the CentOS OpsTools SIG. You need to create an account at
+https://accounts.centos.org/ and apply to become a member of the
+OpsTools group https://accounts.centos.org/group/view/sig-opstools .
+
+Building is done via cbs command line tool, after the required certificate
+was downloaded and saved on the local workstation
+
+[source,bash]
+centos-cert -n -u username
+
+Check out the spec file from github, do a
+
+[source,bash]
+fedpkg --release=el7 srpm
+and finally
+
+[source,bash]
+cbs build opstools7-<component>-candidate foobar.srpm
+
+
+
+New packages
+------------
+
+New packages to OpsTools require a package review;
+please upload a spec file and a SRPM to a webserver somewhere. please file a bug at
+link:https://bugzilla.redhat.com/enter_bug.cgi?product=RDO&component=Package%20Review[Bugzilla]
+please cc: rmeggins and mrunge
+
+and link
+
+  SPEC: <http location of the SPEC file>
+  SRPM: <http location of the SRPM>
+
+
+Use the "fedora-review" tool to create a review report and attach to the bz
+
+If it is an existing package, then submit a review request to
+`https://review.rdoproject.org/r/#/q/project:centos-opstools/$package_name`
+where `$package_name` is something like rubygem-fluent-plugin-secure-forward.
+

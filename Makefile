@@ -1,4 +1,4 @@
-ALL = index.html availability-monitoring.html performance-monitoring.html centralised-logging.html testing-repo.html availability-monitoring-oschecks.html
+ALL = index.html availability-monitoring.html performance-monitoring.html centralised-logging.html testing-repo.html availability-monitoring-oschecks.html building-packages.html
 
 all: $(ALL)
 
