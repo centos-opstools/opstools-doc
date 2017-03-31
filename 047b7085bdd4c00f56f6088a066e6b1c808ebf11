@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa98f980_2303b510",
+        "filename": "Makefile",
+        "patchSetId": 2
+      },
+      "lineNbr": 2,
+      "author": {
+        "id": 390
+      },
+      "writtenOn": "2017-03-31T06:46:43Z",
+      "side": 1,
+      "message": "this line is a bit long, you may consider to split on multile lines. You may consider to have one file per line so adding or removing a new file will end up with a line add/remove which will be easier to review in gerrit.",
+      "revId": "047b7085bdd4c00f56f6088a066e6b1c808ebf11",
+      "serverId": "270e2033-b340-4cff-9539-693957ebf0e7",
+      "unresolved": false
+    }
+  ]
+}
