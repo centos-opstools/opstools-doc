@@ -21,7 +21,7 @@ Locate a bare metal system that meets the following minimum specifications
 Do a fresh CentOS 7 basic install onto the machine. The required repositories
 are enabled by
 
-    yum install http://buildlogs.centos.org/centos/7/opstools/x86_64/common/centos-release-opstools-1-2.el7.noarch.rpm
+    yum install centos-release-opstools
 
 
 First thing we will need to open the firewall on the machine to allow connections to rabbitmq and uchiwa

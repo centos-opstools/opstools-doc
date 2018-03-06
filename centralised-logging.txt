@@ -9,11 +9,14 @@ Locate a bare metal system that meets the following minimum specifications
 Do a fresh CentOS 7 basic install onto the machine. The required repositories
 are enabled by
 
-    yum install http://buildlogs.centos.org/centos/7/opstools/x86_64/common/centos-release-opstools-1-2.el7.noarch.rpm
+    yum install centos-release-opstools
 
-Kibana is a web application so it can be used directly to port 5601, or using the apache http server as a proxy. We suggest to use the apache http server as a 
+Please note, the repositories for elasticsearch and for kibana need to be
+enabled manually from their upstream provider.
+
+Kibana is a web application so it can be used directly to port 5601, or using the apache http server as a proxy. We suggest to use the apache http server as a
 proxy to kibana, for several reasons (it is easier to have the port 80 open on the firewalls, the apache http server can be configured to use authentication, a
-https can be used...).  
+https can be used...).
 
 First thing we will need to open the firewall on the machine to allow connections to fluentd and apache
 
@@ -21,8 +24,8 @@ First thing we will need to open the firewall on the machine to allow connection
  firewall-cmd --zone=public --add-service=http --permanent
 
 .To use kibana directly
-[NOTE] 
-firewall-cmd --zone=public --add-port=5601/tcp --permanent 
+[NOTE]
+firewall-cmd --zone=public --add-port=5601/tcp --permanent
 
 
  firewall-cmd --reload
