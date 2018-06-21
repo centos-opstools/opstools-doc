@@ -1,0 +1,5 @@
+- project:
+    name: centos-opstools/opstools-doc
+    check:
+      jobs:
+        - legacy-centos-opstools-doc
